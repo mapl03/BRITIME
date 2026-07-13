@@ -1,8 +1,9 @@
 {
+  "id": "./",
   "name": "BRITIME",
   "short_name": "BRITIME",
   "description": "Beleženje prihodov, odhodov, viška ur in nadur",
-  "start_url": "./index.html",
+  "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
