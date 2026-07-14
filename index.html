@@ -323,7 +323,7 @@
       <div class="field"><label>Prihod</label><input type="time" id="eIn"></div>
       <div class="field"><label>Odhod</label><input type="time" id="eOut"></div>
     </div>
-    <div class="field"><label>Nadure (h) — samo ročno odrejene</label><input type="number" id="eNad" step="0.25" min="0"></div>
+    <div class="field"><label>Nadure (ure:minute) — samo ročno odrejene</label><input type="text" id="eNad" inputmode="numeric" placeholder="npr. 2:15"></div>
     <div class="field"><label>Opomba</label><textarea id="eNote" placeholder="npr. dopust, teren, zdravnik…"></textarea></div>
     <button class="btn amber" onclick="saveEdit()">Shrani</button>
     <button class="btn danger" onclick="clearEdit()">Počisti dan</button>
@@ -637,6 +637,18 @@ async function addNad(min){
 }
 
 /* ================= UREJANJE DNEVA ================= */
+/* Tolmačenje vnosa nadur: "2:15", "2.15" in "2,15" pomenijo 2 uri 15 minut.
+   "2" pomeni 2 uri. "2.5" (ena števka za piko) pomeni decimalno = 2:30. */
+function parseDur(s){
+  s = (s||'').trim();
+  if(!s) return 0;
+  let m = s.match(/^(\d{1,2}):(\d{1,2})$/);                 // 2:15, 2:5
+  if(m && +m[2] < 60) return (+m[1])*60 + (+m[2]);
+  m = s.match(/^(\d{1,2})[.,](\d{2})$/);                    // 2.15, 2,15 → čas
+  if(m && +m[2] < 60) return (+m[1])*60 + (+m[2]);
+  const f = parseFloat(s.replace(',', '.'));                // 2.5 → 2:30, 3 → 3:00
+  return isNaN(f) || f<0 ? 0 : Math.round(f*60);
+}
 function openEdit(ds){
   editDate = ds;
   const mk = 'm:'+ds.slice(0,7);
@@ -645,7 +657,7 @@ function openEdit(ds){
   document.getElementById('editTitle').textContent = DOW[d.getDay()]+', '+d.getDate()+'. '+MONTHS[d.getMonth()]+' '+d.getFullYear();
   document.getElementById('eIn').value = rec.i||'';
   document.getElementById('eOut').value = rec.o||'';
-  document.getElementById('eNad').value = rec.n ? (rec.n/60) : '';
+  document.getElementById('eNad').value = rec.n ? fmtMin(rec.n) : '';
   document.getElementById('eNote').value = rec.note||'';
   document.getElementById('editOverlay').classList.add('open');
 }
@@ -653,15 +665,15 @@ function closeEdit(){ document.getElementById('editOverlay').classList.remove('o
 async function saveEdit(){
   const i = document.getElementById('eIn').value;
   const o = document.getElementById('eOut').value;
-  const nh = parseFloat(document.getElementById('eNad').value);
+  const nmin = parseDur(document.getElementById('eNad').value);
   const note = document.getElementById('eNote').value.trim();
   const rec = {};
   if(i) rec.i = i;
   if(o) rec.o = o;
-  if(!isNaN(nh) && nh>0) rec.n = Math.round(nh*60);
+  if(nmin > 0) rec.n = nmin;
   if(note) rec.note = note;
   await saveDay(editDate, Object.keys(rec).length ? rec : null);
-  closeEdit(); toast('Shranjeno');
+  closeEdit(); toast(nmin>0 ? 'Shranjeno · nadure '+fmtMin(nmin) : 'Shranjeno');
 }
 async function clearEdit(){
   if(!confirm('Počistim vse vnose za ta dan?')) return;
