@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="sl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#14181d">
+<link rel="manifest" href="./manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="BRITIME">
+<title>BRITIME</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="./firebase-config.js"></script>
+<style>
+  :root{
+    --bg:#14181d; --panel:#1c2229; --panel2:#222a33; --line:#2b343f;
+    --text:#e9edf1; --muted:#8b98a5; --steel:#9fb2c1;
+    --green:#3cc271; --green-d:#2a8f53;
+    --amber:#f5a63b; --amber-d:#c07d1e;
+    --red:#e4574f;
+    --mono:ui-monospace,"SF Mono","Roboto Mono",Consolas,Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    background:var(--bg); color:var(--text); font-family:var(--sans);
+    padding-bottom:calc(64px + env(safe-area-inset-bottom));
+    max-width:520px; margin:0 auto;
+  }
+  header{
+    padding:calc(12px + env(safe-area-inset-top)) 16px 10px;
+    border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; align-items:baseline;
+  }
+  header .brand{font-size:12px; letter-spacing:.18em; color:var(--steel); font-weight:600}
+  header .clock{font-family:var(--mono); font-size:14px; color:var(--muted)}
+
+  .saldi{display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--line); border-bottom:1px solid var(--line)}
+  .saldo{background:var(--panel); padding:10px 16px}
+  .saldo .lbl{font-size:11px; letter-spacing:.12em; color:var(--muted); text-transform:uppercase}
+  .saldo .val{font-family:var(--mono); font-size:22px; font-weight:700; margin-top:2px}
+  .pos{color:var(--green)} .neg{color:var(--red)} .zero{color:var(--steel)}
+  .nad{color:var(--amber)}
+
+  main{padding:16px}
+  .view{display:none} .view.active{display:block}
+
+  .punch-wrap{display:flex; flex-direction:column; align-items:center; padding:18px 0 6px}
+  .punch{
+    width:210px; height:210px; border-radius:50%;
+    border:none; cursor:pointer; position:relative;
+    font-family:var(--sans); color:#fff; font-weight:800; font-size:26px; letter-spacing:.06em;
+    box-shadow:0 0 0 8px var(--panel), 0 0 0 9px var(--line), 0 12px 30px rgba(0,0,0,.45), inset 0 -6px 14px rgba(0,0,0,.35), inset 0 4px 10px rgba(255,255,255,.14);
+    transition:transform .08s ease;
+  }
+  .punch:active{transform:scale(.97)}
+  .punch .sub{display:block; font-weight:500; font-size:13px; letter-spacing:0; margin-top:6px; opacity:.9; font-family:var(--mono)}
+  .punch.in{background:radial-gradient(circle at 50% 32%, #48d381, var(--green-d))}
+  .punch.out{background:radial-gradient(circle at 50% 32%, #ffbb52, var(--amber-d)); color:#221a08}
+  .punch.done{background:radial-gradient(circle at 50% 32%, #3a4552, #232b34); color:var(--steel)}
+  .punch-hint{margin-top:14px; font-size:12px; color:var(--muted)}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin-top:14px}
+  .card h3{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); margin-bottom:10px; font-weight:600}
+  .rowline{display:flex; justify-content:space-between; align-items:center; padding:6px 0; font-size:15px}
+  .rowline + .rowline{border-top:1px solid var(--line)}
+  .rowline .k{color:var(--muted)}
+  .rowline .v{font-family:var(--mono); font-weight:600}
+
+  .btn{
+    display:block; width:100%; border:none; border-radius:12px; padding:14px;
+    font-size:15px; font-weight:700; cursor:pointer; font-family:var(--sans);
+  }
+  .btn.ghost{background:var(--panel2); color:var(--text); border:1px solid var(--line)}
+  .btn.amberline{background:transparent; color:var(--amber); border:1px solid var(--amber-d)}
+  .btn.amber{background:var(--amber); color:#221a08}
+  .btn.green{background:var(--green); color:#06180d}
+  .btn.danger{background:transparent; color:var(--red); border:1px solid var(--red)}
+  .btn + .btn{margin-top:10px}
+  .btn:active{opacity:.85}
+
+  .quick{display:flex; gap:8px; margin-top:10px}
+  .quick button{flex:1; background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:10px; padding:10px; font-family:var(--mono); font-size:14px; cursor:pointer}
+
+  .mnav{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px}
+  .mnav button{background:var(--panel2); border:1px solid var(--line); color:var(--text); width:44px; height:40px; border-radius:10px; font-size:18px; cursor:pointer}
+  .mnav .mtitle{font-size:17px; font-weight:700; letter-spacing:.02em}
+  table.days{width:100%; border-collapse:collapse; font-size:13px}
+  table.days th{font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); text-align:left; padding:6px 3px; border-bottom:1px solid var(--line); font-weight:600}
+  table.days td{padding:8px 3px; border-bottom:1px solid var(--line); font-family:var(--mono)}
+  table.days td.dt{font-family:var(--sans)}
+  table.days tr{cursor:pointer}
+  table.days tr.wknd td.dt{color:var(--muted)}
+  table.days tr.prz td.dt{color:var(--amber)}
+  table.days tr.today td{background:rgba(60,194,113,.07)}
+  td.r, th.r{text-align:right}
+  .tag{font-size:9px; letter-spacing:.06em; border:1px solid var(--line); border-radius:4px; padding:1px 4px; color:var(--muted); margin-left:4px}
+
+  .overlay{position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:flex-end; justify-content:center; z-index:50}
+  .overlay.open{display:flex}
+  .sheet{background:var(--panel); border-top:1px solid var(--line); border-radius:18px 18px 0 0; width:100%; max-width:520px; padding:18px 18px calc(18px + env(safe-area-inset-bottom))}
+  .sheet h2{font-size:17px; margin-bottom:14px}
+  .field{margin-bottom:12px}
+  .field label{display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:6px}
+  .field input, .field textarea{
+    width:100%; background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    border-radius:10px; padding:12px; font-size:16px; font-family:var(--mono);
+  }
+  .field textarea{font-family:var(--sans); resize:none; height:64px}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:10px}
+
+  nav{
+    position:fixed; bottom:0; left:0; right:0; max-width:520px; margin:0 auto;
+    display:grid; grid-template-columns:1fr 1fr 1fr;
+    background:var(--panel); border-top:1px solid var(--line);
+    padding-bottom:env(safe-area-inset-bottom); z-index:40;
+  }
+  nav button{background:none; border:none; color:var(--muted); padding:12px 0 10px; font-size:12px; font-weight:600; letter-spacing:.08em; cursor:pointer; text-transform:uppercase}
+  nav button.active{color:var(--text)}
+  nav button.active span{border-bottom:2px solid var(--amber); padding-bottom:6px}
+
+  .toast{
+    position:fixed; left:50%; transform:translateX(-50%); bottom:calc(80px + env(safe-area-inset-bottom));
+    background:var(--panel2); border:1px solid var(--line); color:var(--text);
+    padding:10px 18px; border-radius:999px; font-size:14px; opacity:0; transition:opacity .25s; pointer-events:none; z-index:60; white-space:nowrap;
+  }
+  .toast.show{opacity:1}
+  .note{font-size:12px; color:var(--muted); line-height:1.5; margin-top:10px}
+  .totals .v{font-size:15px}
+
+  .tchips{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px}
+  .tchip{display:flex; align-items:center; gap:7px; background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:999px; padding:8px 14px 8px 9px; font-size:13px; font-weight:600; cursor:pointer}
+  .tchip span{width:18px; height:18px; border-radius:50%; border:1px solid rgba(128,128,128,.45); display:inline-block}
+  .tchip.active{border-color:var(--amber); box-shadow:0 0 0 1px var(--amber)}
+  .cpick{display:grid; grid-template-columns:repeat(5,1fr); gap:8px}
+  .cpick .cp{text-align:center}
+  .cpick label{display:block; font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:5px}
+  .cpick input[type=color]{width:100%; height:42px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); padding:3px; cursor:pointer}
+
+  /* prijava */
+  #loginScreen{
+    position:fixed; inset:0; z-index:100; background:var(--bg);
+    display:none; align-items:center; justify-content:center; padding:20px;
+  }
+  #loginScreen.open{display:flex}
+  .logincard{width:100%; max-width:380px; background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:26px 22px}
+  .logincard .logo{width:74px; height:74px; border-radius:18px; margin:0 auto 14px; display:block}
+  .logincard h1{font-size:20px; text-align:center; letter-spacing:.14em; margin-bottom:4px}
+  .logincard .sub{font-size:12px; color:var(--muted); text-align:center; margin-bottom:18px}
+  .loginerr{color:var(--red); font-size:13px; margin:8px 0; min-height:18px; text-align:center}
+</style>
+</head>
+<body>
+
+<!-- PRIJAVA (prikaže se samo, če je oblak nastavljen) -->
+<div id="loginScreen">
+  <div class="logincard">
+    <img src="./icon-192.png" class="logo" alt="BRITIME">
+    <h1>BRITIME</h1>
+    <div class="sub">Evidenca delovnih ur · interna uporaba</div>
+    <div class="field"><label>E-pošta</label><input type="email" id="lEmail" autocomplete="username" placeholder="ime.priimek@..."></div>
+    <div class="field"><label>Geslo (vsaj 6 znakov)</label><input type="password" id="lPass" autocomplete="current-password" placeholder="••••••"></div>
+    <div class="loginerr" id="lErr"></div>
+    <button class="btn green" onclick="loginUser()">Prijava</button>
+    <button class="btn ghost" onclick="registerUser()">Registracija (prvič)</button>
+    <div class="note" style="text-align:center">Registriraš se samo enkrat — brez potrditvenih e-mailov. Ure se sinhronizirajo med telefonom in računalnikom.</div>
+  </div>
+</div>
+
+<header>
+  <div class="brand">BRITIME</div>
+  <div class="clock" id="clock">--:--:--</div>
+</header>
+
+<div class="saldi">
+  <div class="saldo"><div class="lbl">Saldo plus ur</div><div class="val" id="saldoPlus">0:00</div></div>
+  <div class="saldo"><div class="lbl">Saldo nadur</div><div class="val nad" id="saldoNad">0:00</div></div>
+</div>
+
+<div id="cloudWarn" style="display:none; background:rgba(228,87,79,.12); border-bottom:1px solid var(--red); color:var(--red); font-size:12px; padding:8px 16px; font-weight:600">⚠ Oblak ni povezan — sinhronizacija NE deluje. Preveri datoteko firebase-config.js na GitHubu.</div>
+
+<main>
+
+  <!-- DANES -->
+  <section class="view active" id="view-danes">
+    <div class="punch-wrap">
+      <button class="punch in" id="punchBtn" onclick="punch()">PRIHOD<span class="sub" id="punchSub"></span></button>
+      <div class="punch-hint" id="punchHint"></div>
+    </div>
+
+    <div class="card">
+      <h3>Danes · <span id="todayDate"></span></h3>
+      <div class="rowline"><span class="k">Prihod</span><span class="v" id="tIn">—</span></div>
+      <div class="rowline"><span class="k">Odhod</span><span class="v" id="tOut">—</span></div>
+      <div class="rowline"><span class="k">Oddelano</span><span class="v" id="tWorked">—</span></div>
+      <div class="rowline"><span class="k">Plus / minus</span><span class="v" id="tPlus">—</span></div>
+      <div class="rowline"><span class="k">Nadure</span><span class="v nad" id="tNad">0:00</span></div>
+    </div>
+
+    <div class="card" id="nadCard">
+      <h3>Nadure (odrejene, med tednom)</h3>
+      <button class="btn amberline" id="nadBtn" onclick="toggleNadure()">ZAČNI NADURE</button>
+      <div class="quick">
+        <button onclick="addNad(30)">+0:30</button>
+        <button onclick="addNad(60)">+1:00</button>
+        <button onclick="addNad(120)">+2:00</button>
+        <button onclick="addNad(-30)">−0:30</button>
+      </div>
+      <div class="note">Nadure se štejejo popolnoma ločeno in NE vplivajo na plus ure. Ob sobotah, nedeljah in praznikih gumb za nadure ne potrebuješ — takrat gredo vse oddelane ure (prihod–odhod) avtomatsko med nadure.</div>
+    </div>
+  </section>
+
+  <!-- MESEC -->
+  <section class="view" id="view-mesec">
+    <div class="mnav">
+      <button onclick="chgMonth(-1)">‹</button>
+      <div class="mtitle" id="mTitle"></div>
+      <button onclick="chgMonth(1)">›</button>
+    </div>
+    <table class="days">
+      <thead><tr><th>Dan</th><th class="r">Prihod</th><th class="r">Odhod</th><th class="r">Plus</th><th class="r">Saldo</th><th class="r">Nad.</th></tr></thead>
+      <tbody id="mBody"></tbody>
+    </table>
+    <div class="card totals">
+      <h3>Seštevek meseca</h3>
+      <div class="rowline"><span class="k">Skupaj delovne ure</span><span class="v" id="mWorked">0:00</span></div>
+      <div class="rowline"><span class="k">Plus ure ta mesec</span><span class="v" id="mPlus">0:00</span></div>
+      <div class="rowline"><span class="k">Skupaj nadure</span><span class="v nad" id="mNad">0:00</span></div>
+      <div class="rowline"><span class="k">Norma meseca</span><span class="v" id="mNorm">0:00</span></div>
+      <div class="rowline"><span class="k">Prenos iz prejšnjega meseca</span><span class="v" id="mStart">0:00</span></div>
+      <div class="rowline"><span class="k">Saldo ob koncu meseca</span><span class="v" id="mEnd">0:00</span></div>
+      <div class="rowline"><span class="k">Izplačljive ure (nad <span id="capLbl">20</span> h)</span><span class="v" id="mIzpl">0:00</span></div>
+      <div class="rowline"><span class="k">Prenos v naslednji mesec</span><span class="v" id="mCarry">0:00</span></div>
+    </div>
+    <div class="note">Klikni na dan za popravek ali ročni vnos. Dopust/bolniško pusti prazno. Sobote, nedelje in prazniki: oddelane ure gredo avtomatsko med nadure, plus ur se ne dotaknejo.</div>
+  </section>
+
+  <!-- VEČ -->
+  <section class="view" id="view-vec">
+    <div class="card" id="installCard" style="display:none">
+      <h3>Namesti aplikacijo</h3>
+      <button class="btn green" onclick="installApp()">Namesti BRITIME na ta telefon</button>
+      <div class="note">En klik in ikona je na začetnem zaslonu.</div>
+    </div>
+    <div class="card" id="accountCard" style="display:none">
+      <h3>Račun</h3>
+      <div class="rowline"><span class="k">Prijavljen</span><span class="v" id="accEmail" style="font-size:13px"></span></div>
+      <div class="rowline"><span class="k">Sinhronizacija</span><span class="v" id="syncState">—</span></div>
+      <button class="btn ghost" onclick="logoutUser()" style="margin-top:10px">Odjava</button>
+      <div class="note">Ure so shranjene v oblaku na tvojem računu — na telefonu in računalniku vidiš iste podatke, sproti.</div>
+    </div>
+    <div class="card">
+      <h3>Uvoz iz Excela (Špica)</h3>
+      <button class="btn amber" onclick="document.getElementById('xlsFile').click()">Uvozi Excel evidenco (.xlsm / .xlsx)</button>
+      <input type="file" id="xlsFile" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="importExcel(this)">
+      <div class="note" id="impResult">Aplikacija prebere vse mesečne liste (Januar–December): datum, prihod (Stanje Začetek), odhod (Stanje Konec) in nadure. Plus ure in salde izračuna sama. Prekrijejo se samo dnevi, ki so izpolnjeni v Excelu.</div>
+    </div>
+    <div class="card">
+      <h3>Izvoz</h3>
+      <button class="btn ghost" onclick="exportCSV()">Izvozi prikazani mesec (CSV za Excel)</button>
+      <button class="btn ghost" onclick="exportJSON()">Varnostna kopija vseh podatkov (JSON)</button>
+      <button class="btn ghost" onclick="document.getElementById('impFile').click()">Uvozi varnostno kopijo</button>
+      <input type="file" id="impFile" accept=".json" style="display:none" onchange="importJSON(this)">
+    </div>
+    <div class="card">
+      <h3>Nastavitve</h3>
+      <div class="grid2">
+        <div class="field"><label>Norma na dan (h)</label><input type="number" id="setNorm" step="0.5" min="0"></div>
+        <div class="field"><label>Meja za izplačilo (h)</label><input type="number" id="setPrag" step="1" min="0"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Začetni saldo plus (u:min)</label><input type="text" id="setStartPlus" inputmode="numeric" placeholder="npr. 14:18"></div>
+        <div class="field"><label>Začetne nadure (u:min)</label><input type="text" id="setStartNad" inputmode="numeric" placeholder="npr. 2:30"></div>
+      </div>
+      <button class="btn amber" onclick="saveSettings()">Shrani nastavitve</button>
+      <div class="note">Začetni saldo vpiši v obliki ure:minute, npr. 14:18 (lahko tudi -3:30, če si v minusu). Plus ure in nadure se vedno štejejo ločeno.</div>
+    </div>
+    <div class="card">
+      <h3>Videz</h3>
+      <div class="tchips">
+        <button class="tchip" data-t="jeklo" onclick="setTheme('jeklo')"><span style="background:#14181d"></span>Jeklo</button>
+        <button class="tchip" data-t="crna" onclick="setTheme('crna')"><span style="background:#000"></span>Črna</button>
+        <button class="tchip" data-t="roza" onclick="setTheme('roza')"><span style="background:#f7abd0"></span>Roza</button>
+        <button class="tchip" data-t="svetla" onclick="setTheme('svetla')"><span style="background:#f3f5f8"></span>Svetla</button>
+        <button class="tchip" data-t="vijolicna" onclick="setTheme('vijolicna')"><span style="background:#2a2145"></span>Vijolična</button>
+      </div>
+      <div class="cpick">
+        <div class="cp"><label>Ozadje</label><input type="color" id="cBg" onchange="customChanged()"></div>
+        <div class="cp"><label>Kartice</label><input type="color" id="cPanel" onchange="customChanged()"></div>
+        <div class="cp"><label>Črte</label><input type="color" id="cLine" onchange="customChanged()"></div>
+        <div class="cp"><label>Črke</label><input type="color" id="cText" onchange="customChanged()"></div>
+        <div class="cp"><label>Poudarek</label><input type="color" id="cAcc" onchange="customChanged()"></div>
+      </div>
+      <div class="note">Izberi pripravljeno temo ali si sestavi svojo — vsak uporabnik ima svoj videz, shrani se skupaj z računom.</div>
+    </div>
+    <div class="card">
+      <h3>Namestitev na telefon</h3>
+      <div class="note" style="margin-top:0">
+        <b>Pomembno:</b> povezavo odpri v <b>Chromu</b> (Android) oz. <b>Safariju</b> (iPhone) — ne v vgrajenem brskalniku Viberja/Messengerja, tam namestitev ni mogoča.<br><br>
+        <b>Android (Chrome):</b> zgoraj se pojavi gumb "Namesti aplikacijo" ali meni ⋮ → "Dodaj na začetni zaslon" / "Namesti aplikacijo". Če je aplikacija podprta, se pokaže tudi zelen gumb na vrhu tega zavihka.<br>
+        <b>iPhone (Safari):</b> gumb Deli → "Dodaj na začetni zaslon".<br><br>
+        Na računalniku namestitev ni potrebna — samo odpreš povezavo v brskalniku in se prijaviš z istim računom.
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button id="tab-danes" class="active" onclick="showView('danes')"><span>Danes</span></button>
+  <button id="tab-mesec" onclick="showView('mesec')"><span>Mesec</span></button>
+  <button id="tab-vec" onclick="showView('vec')"><span>Več</span></button>
+</nav>
+
+<!-- urejanje dneva -->
+<div class="overlay" id="editOverlay" onclick="if(event.target===this)closeEdit()">
+  <div class="sheet">
+    <h2 id="editTitle">Uredi dan</h2>
+    <div class="grid2">
+      <div class="field"><label>Prihod</label><input type="time" id="eIn"></div>
+      <div class="field"><label>Odhod</label><input type="time" id="eOut"></div>
+    </div>
+    <div class="field"><label>Nadure (ure:minute) — samo ročno odrejene</label><input type="text" id="eNad" inputmode="numeric" placeholder="npr. 2:15"></div>
+    <div class="field"><label>Opomba</label><textarea id="eNote" placeholder="npr. dopust, teren, zdravnik…"></textarea></div>
+    <button class="btn amber" onclick="saveEdit()">Shrani</button>
+    <button class="btn danger" onclick="clearEdit()">Počisti dan</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ================= SHRANJEVANJE =================
+   Vedno localStorage (deluje tudi brez interneta);
+   če je uporabnik prijavljen, se vsak zapis sproti pošlje še v oblak (Firestore). */
+const SKEY = 'evidenca-ur:';
+function lsGet(k, fb){ try{ const v = localStorage.getItem(SKEY+k); return v!==null ? JSON.parse(v) : fb; }catch(e){ return fb; } }
+function lsSet(k, v){ try{ localStorage.setItem(SKEY+k, JSON.stringify(v)); }catch(e){ console.error(e); } }
+function lsDel(k){ try{ localStorage.removeItem(SKEY+k); }catch(e){} }
+
+async function sGet(k, fb){ return lsGet(k, fb); }
+async function sSet(k, v){
+  lsSet(k, v);
+  cloudWrite(k, v);
+}
+async function sDel(k){
+  lsDel(k);
+  cloudDelete(k);
+}
+
+/* ================= STANJE ================= */
+let settings = { norm:8, izplPrag:20, startPlus:0, startNadure:0 };
+let store = {};            // { 'm:2026-07': { '13': {i,o,n,note} } }
+let nsess = null;          // { start:'HH:MM', date:'YYYY-MM-DD' } — samo lokalno na napravi
+let viewMonth = new Date(); viewMonth.setDate(1);
+let editDate = null;
+
+/* ================= DATUMI IN ČASI ================= */
+const pad = n => String(n).padStart(2,'0');
+const dKey = d => d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const mKeyOf = d => 'm:'+d.getFullYear()+'-'+pad(d.getMonth()+1);
+const nowHM = () => { const d=new Date(); return pad(d.getHours())+':'+pad(d.getMinutes()); };
+const MONTHS = ['januar','februar','marec','april','maj','junij','julij','avgust','september','oktober','november','december'];
+const DOW = ['ned','pon','tor','sre','čet','pet','sob'];
+
+function hmToMin(s){ if(!s) return null; const p=s.split(':'); return (+p[0])*60 + (+p[1]); }
+function fmtMin(m, signed){
+  if(m===null||m===undefined||isNaN(m)) return '—';
+  const sign = m<0 ? '−' : (signed && m>0 ? '+' : '');
+  const a = Math.abs(Math.round(m));
+  return sign + Math.floor(a/60) + ':' + pad(a%60);
+}
+function signClass(m){ return m>0?'pos':(m<0?'neg':'zero'); }
+
+/* slovenski prazniki (fiksni + velikonočni ponedeljek, za poljubno leto) */
+function easter(y){
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),
+  g=Math.floor((b-f+1)/3),h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,
+  l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+  mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
+  return new Date(y,mo-1,da);
+}
+function holidaySet(y){
+  const s = new Set(['01-01','01-02','02-08','04-27','05-01','05-02','06-25','08-15','10-31','11-01','12-25','12-26'].map(x=>y+'-'+x));
+  const em = easter(y); em.setDate(em.getDate()+1);
+  s.add(dKey(em));
+  return s;
+}
+const holCache = {};
+function dayType(dateStr){
+  const y = +dateStr.slice(0,4);
+  if(!holCache[y]) holCache[y] = holidaySet(y);
+  if(holCache[y].has(dateStr)) return 'praznik';
+  const dow = new Date(dateStr+'T12:00:00').getDay();
+  return (dow===0||dow===6) ? 'vikend' : 'delovni';
+}
+
+/* ================= IZRAČUNI =================
+   PRAVILA (Brinox):
+   - Delovni dan: plus = oddelano − norma. Nadure (ročno odrejene) so POVSEM LOČENE
+     in NIKOLI ne vplivajo na plus.
+   - Sobota / nedelja / praznik: VSE oddelane ure (prihod–odhod) gredo avtomatsko
+     med nadure. Plus se ne spremeni.
+   - Saldo plus ur: sešteva se čez mesece; kar je ob koncu meseca nad mejo (20 h),
+     se izplača, naslednji mesec nadaljuje od meje. Pod mejo se prenaša nespremenjeno. */
+function dayCalc(dateStr, rec){
+  const type = dayType(dateStr);
+  let worked = null, plus = null;
+  let nad = rec ? (rec.n||0) : 0;                 // ročno odrejene nadure
+  if(rec && rec.i && rec.o){
+    worked = hmToMin(rec.o) - hmToMin(rec.i);
+    if(worked < 0) worked += 1440;                // čez polnoč
+    if(type === 'delovni'){
+      plus = worked - settings.norm*60;           // nadure se NE odštevajo!
+    } else {
+      nad += worked;                              // vikend/praznik: vse ure → nadure
+    }
+  }
+  return { type, worked, plus, nad };
+}
+function computeAll(){
+  const cap = Math.round((settings.izplPrag||20)*60);
+  const keys = Object.keys(store).filter(k=>k.startsWith('m:')).sort();
+  const months = {};
+  let saldo = Math.round(settings.startPlus*60);
+  let nad = Math.round(settings.startNadure*60);
+  const todayS = dKey(new Date());
+  let saldoNow = saldo, nadNow = nad;
+  for(const mk of keys){
+    const ym = mk.slice(2);
+    const y = +ym.slice(0,4), m = +ym.slice(5,7);
+    const ndays = new Date(y, m, 0).getDate();
+    const mm = store[mk];
+    const startSaldo = saldo;
+    let plusSum=0, nadSum=0, workedSum=0;
+    for(let d=1; d<=ndays; d++){
+      const ds = ym+'-'+pad(d);
+      const c = dayCalc(ds, mm[String(d)]);
+      if(c.worked!==null) workedSum += c.worked;
+      if(c.plus!==null){ saldo += c.plus; plusSum += c.plus; }
+      nad += c.nad; nadSum += c.nad;
+      if(ds <= todayS){ saldoNow = saldo; nadNow = nad; }
+    }
+    const endSaldo = saldo;
+    const payout = endSaldo > cap ? endSaldo - cap : 0;
+    saldo = Math.min(endSaldo, cap);
+    months[ym] = { startSaldo, plusSum, endSaldo, payout, carry:saldo, nadSum, workedSum };
+    const lastDay = ym+'-'+pad(ndays);
+    if(lastDay < todayS){ saldoNow = saldo; nadNow = nad; }
+  }
+  function carryBefore(ym){
+    let best = null;
+    for(const k in months){ if(k < ym && (best===null || k > best)) best = k; }
+    return best!==null ? months[best].carry : Math.round(settings.startPlus*60);
+  }
+  return { months, saldoNow, nadNow, cap, carryBefore };
+}
+/* ================= KONEC IZRAČUNOV ================= */
+
+/* ================= PRIKAZ ================= */
+function showView(v){
+  document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.getElementById('tab-'+v).classList.add('active');
+  if(v==='mesec') renderMonth();
+}
+function rerenderAll(){
+  renderSaldi(); renderToday();
+  if(document.getElementById('view-mesec').classList.contains('active')) renderMonth();
+}
+function renderSaldi(){
+  const s = computeAll();
+  const sp = document.getElementById('saldoPlus');
+  sp.textContent = fmtMin(s.saldoNow, true);
+  sp.className = 'val '+signClass(s.saldoNow);
+  document.getElementById('saldoNad').textContent = fmtMin(s.nadNow);
+}
+function todayRec(){
+  const mk = mKeyOf(new Date());
+  const d = String(new Date().getDate());
+  return (store[mk] && store[mk][d]) || null;
+}
+function renderToday(){
+  const now = new Date();
+  const ds = dKey(now);
+  const rec = todayRec();
+  const c = dayCalc(ds, rec);
+  const isWknd = c.type !== 'delovni';
+  document.getElementById('todayDate').textContent = DOW[now.getDay()]+', '+now.getDate()+'. '+MONTHS[now.getMonth()]+' '+now.getFullYear();
+  document.getElementById('tIn').textContent = rec && rec.i ? rec.i : '—';
+  document.getElementById('tOut').textContent = rec && rec.o ? rec.o : '—';
+  document.getElementById('tWorked').textContent = fmtMin(c.worked);
+  const tp = document.getElementById('tPlus');
+  if(isWknd){
+    tp.textContent = c.worked!==null ? '→ nadure' : '—';
+    tp.className = 'v nad';
+  } else {
+    tp.textContent = c.plus===null ? '—' : fmtMin(c.plus, true);
+    tp.className = 'v '+(c.plus===null?'':signClass(c.plus));
+  }
+  document.getElementById('tNad').textContent = fmtMin(c.nad);
+
+  const btn = document.getElementById('punchBtn');
+  const hint = document.getElementById('punchHint');
+  const typeLbl = c.type==='delovni' ? 'norma '+settings.norm+' h' : (c.type==='vikend'?'VIKEND · ure → nadure':'PRAZNIK · ure → nadure');
+  if(!rec || !rec.i){
+    btn.className = 'punch in';
+    btn.innerHTML = 'PRIHOD<span class="sub">'+typeLbl+'</span>';
+    hint.textContent = 'Pritisni, ko prideš v službo';
+  } else if(!rec.o){
+    btn.className = 'punch out';
+    btn.innerHTML = 'ODHOD<span class="sub">prišel ob '+rec.i+'</span>';
+    const el = (Date.now() - new Date(ds+'T'+rec.i).getTime())/60000;
+    hint.textContent = 'V službi že '+fmtMin(el)+(isWknd?' · vse gre v nadure':'');
+  } else {
+    btn.className = 'punch done';
+    btn.innerHTML = 'ZAKLJUČENO<span class="sub">'+rec.i+' – '+rec.o+'</span>';
+    hint.textContent = 'Pritisni za posodobitev odhoda';
+  }
+
+  const nb = document.getElementById('nadBtn');
+  if(nsess && nsess.date===ds){
+    nb.textContent = 'USTAVI NADURE · tečejo od '+nsess.start;
+    nb.className = 'btn amber';
+  } else {
+    nb.textContent = 'ZAČNI NADURE';
+    nb.className = 'btn amberline';
+  }
+}
+function renderMonth(){
+  const y = viewMonth.getFullYear(), m = viewMonth.getMonth();
+  document.getElementById('mTitle').textContent = MONTHS[m].charAt(0).toUpperCase()+MONTHS[m].slice(1)+' '+y;
+  const ym = y+'-'+pad(m+1);
+  const mm = store['m:'+ym] || {};
+  const ndays = new Date(y, m+1, 0).getDate();
+  const tKey = dKey(new Date());
+  const all = computeAll();
+  let run = all.months[ym] ? all.months[ym].startSaldo : all.carryBefore(ym);
+  const startSaldo = run;
+  let html='', sw=0, sp=0, sn=0, norm=0;
+  for(let d=1; d<=ndays; d++){
+    const ds = ym+'-'+pad(d);
+    const rec = mm[String(d)];
+    const c = dayCalc(ds, rec);
+    if(c.type==='delovni') norm += settings.norm*60;
+    if(c.worked!==null) sw += c.worked;
+    if(c.plus!==null){ sp += c.plus; run += c.plus; }
+    sn += c.nad;
+    const cls = [c.type==='vikend'?'wknd':'', c.type==='praznik'?'prz':'', ds===tKey?'today':''].join(' ');
+    const tag = c.type==='praznik' ? '<span class="tag">PRAZNIK</span>' : (rec&&rec.note ? '<span class="tag">✎</span>' : '');
+    const showRun = c.plus!==null;
+    html += '<tr class="'+cls+'" onclick="openEdit(\''+ds+'\')">'
+      +'<td class="dt">'+d+'. '+DOW[new Date(ds+'T12:00:00').getDay()]+tag+'</td>'
+      +'<td class="r">'+(rec&&rec.i?rec.i:'')+'</td>'
+      +'<td class="r">'+(rec&&rec.o?rec.o:'')+'</td>'
+      +'<td class="r '+(c.plus!==null?signClass(c.plus):'')+'">'+(c.plus!==null?fmtMin(c.plus,true):'')+'</td>'
+      +'<td class="r '+(showRun?signClass(run):'')+'">'+(showRun?fmtMin(run,true):'')+'</td>'
+      +'<td class="r nad">'+(c.nad?fmtMin(c.nad):'')+'</td></tr>';
+  }
+  document.getElementById('mBody').innerHTML = html;
+  document.getElementById('mWorked').textContent = fmtMin(sw);
+  const mp = document.getElementById('mPlus');
+  mp.textContent = fmtMin(sp, true); mp.className = 'v '+signClass(sp);
+  document.getElementById('mNad').textContent = fmtMin(sn);
+  document.getElementById('mNorm').textContent = fmtMin(norm);
+  const endSaldo = startSaldo + sp;
+  const cap = all.cap;
+  const payout = endSaldo > cap ? endSaldo - cap : 0;
+  document.getElementById('mStart').textContent = fmtMin(startSaldo, true);
+  const me = document.getElementById('mEnd');
+  me.textContent = fmtMin(endSaldo, true); me.className = 'v '+signClass(endSaldo);
+  const mi = document.getElementById('mIzpl');
+  mi.textContent = payout ? fmtMin(payout) : '0:00';
+  mi.className = 'v '+(payout?'nad':'zero');
+  document.getElementById('mCarry').textContent = fmtMin(Math.min(endSaldo, cap), true);
+  document.getElementById('capLbl').textContent = (cap/60).toString().replace('.',',');
+}
+function chgMonth(d){ viewMonth.setMonth(viewMonth.getMonth()+d); renderMonth(); }
+
+/* ================= DEJANJA ================= */
+async function saveDay(dateStr, rec){
+  const mk = 'm:'+dateStr.slice(0,7);
+  if(!store[mk]) store[mk] = {};
+  const d = String(+dateStr.slice(8));
+  if(rec) store[mk][d] = rec; else delete store[mk][d];
+  await sSet(mk, store[mk]);
+  rerenderAll();
+}
+async function punch(){
+  const ds = dKey(new Date());
+  const rec = todayRec() || {};
+  if(!rec.i){
+    rec.i = nowHM();
+    toast('Prihod zabeležen ob '+rec.i);
+  } else if(!rec.o){
+    rec.o = nowHM();
+    toast('Odhod zabeležen ob '+rec.o);
+  } else {
+    if(!confirm('Dan je že zaključen. Posodobim odhod na trenutni čas?')) return;
+    rec.o = nowHM();
+    toast('Odhod posodobljen na '+rec.o);
+  }
+  await saveDay(ds, rec);
+}
+async function toggleNadure(){
+  const ds = dKey(new Date());
+  if(nsess && nsess.date===ds){
+    let dur = hmToMin(nowHM()) - hmToMin(nsess.start);
+    if(dur<0) dur += 1440;
+    if(dur<1) dur = 1;
+    const rec = todayRec() || {};
+    rec.n = (rec.n||0) + dur;
+    nsess = null; lsDel('nsess');
+    await saveDay(ds, rec);
+    toast('Nadure: +'+fmtMin(dur));
+  } else {
+    if(dayType(ds)!=='delovni'){
+      toast('Danes gredo vse ure avtomatsko v nadure 👍');
+      return;
+    }
+    nsess = { start: nowHM(), date: ds };
+    lsSet('nsess', nsess);
+    renderToday();
+    toast('Nadure tečejo od '+nsess.start);
+  }
+}
+async function addNad(min){
+  const ds = dKey(new Date());
+  const rec = todayRec() || {};
+  rec.n = Math.max(0, (rec.n||0) + min);
+  await saveDay(ds, (rec.i||rec.o||rec.n||rec.note) ? rec : null);
+  toast('Ročne nadure danes: '+fmtMin(rec.n||0));
+}
+
+/* ================= UREJANJE DNEVA ================= */
+/* Tolmačenje vnosa nadur: "2:15", "2.15" in "2,15" pomenijo 2 uri 15 minut.
+   "2" pomeni 2 uri. "2.5" (ena števka za piko) pomeni decimalno = 2:30. */
+function parseDur(s){
+  s = (s||'').trim();
+  if(!s) return 0;
+  let m = s.match(/^(\d{1,2}):(\d{1,2})$/);                 // 2:15, 2:5
+  if(m && +m[2] < 60) return (+m[1])*60 + (+m[2]);
+  m = s.match(/^(\d{1,2})[.,](\d{2})$/);                    // 2.15, 2,15 → čas
+  if(m && +m[2] < 60) return (+m[1])*60 + (+m[2]);
+  const f = parseFloat(s.replace(',', '.'));                // 2.5 → 2:30, 3 → 3:00
+  return isNaN(f) || f<0 ? 0 : Math.round(f*60);
+}
+function openEdit(ds){
+  editDate = ds;
+  const mk = 'm:'+ds.slice(0,7);
+  const rec = (store[mk]||{})[String(+ds.slice(8))] || {};
+  const d = new Date(ds+'T12:00:00');
+  document.getElementById('editTitle').textContent = DOW[d.getDay()]+', '+d.getDate()+'. '+MONTHS[d.getMonth()]+' '+d.getFullYear();
+  document.getElementById('eIn').value = rec.i||'';
+  document.getElementById('eOut').value = rec.o||'';
+  document.getElementById('eNad').value = rec.n ? fmtMin(rec.n) : '';
+  document.getElementById('eNote').value = rec.note||'';
+  document.getElementById('editOverlay').classList.add('open');
+}
+function closeEdit(){ document.getElementById('editOverlay').classList.remove('open'); }
+async function saveEdit(){
+  const i = document.getElementById('eIn').value;
+  const o = document.getElementById('eOut').value;
+  const nmin = parseDur(document.getElementById('eNad').value);
+  const note = document.getElementById('eNote').value.trim();
+  const rec = {};
+  if(i) rec.i = i;
+  if(o) rec.o = o;
+  if(nmin > 0) rec.n = nmin;
+  if(note) rec.note = note;
+  await saveDay(editDate, Object.keys(rec).length ? rec : null);
+  closeEdit(); toast(nmin>0 ? 'Shranjeno · nadure '+fmtMin(nmin) : 'Shranjeno');
+}
+async function clearEdit(){
+  if(!confirm('Počistim vse vnose za ta dan?')) return;
+  await saveDay(editDate, null);
+  closeEdit(); toast('Dan počiščen');
+}
+
+/* ================= NASTAVITVE ================= */
+/* vnos s predznakom (začetni saldo je lahko tudi minus) */
+function parseDurSigned(s){
+  s = (s||'').trim();
+  const neg = s.startsWith('-') || s.startsWith('−');
+  if(neg) s = s.slice(1);
+  const m = parseDur(s);
+  return neg ? -m : m;
+}
+function fmtDurInput(min){
+  min = Math.round(min);
+  const sign = min<0 ? '-' : '';
+  const a = Math.abs(min);
+  return sign + Math.floor(a/60) + ':' + pad(a%60);
+}
+async function saveSettings(){
+  settings.norm = parseFloat(document.getElementById('setNorm').value)||8;
+  settings.izplPrag = parseFloat(document.getElementById('setPrag').value)||20;
+  settings.startPlus = parseDurSigned(document.getElementById('setStartPlus').value)/60;
+  settings.startNadure = parseDur(document.getElementById('setStartNad').value)/60;
+  await sSet('settings', settings);
+  fillSettings();
+  rerenderAll();
+  toast('Shranjeno · začetni saldo '+fmtDurInput(settings.startPlus*60));
+}
+function fillSettings(){
+  document.getElementById('setNorm').value = settings.norm;
+  document.getElementById('setPrag').value = settings.izplPrag||20;
+  document.getElementById('setStartPlus').value = fmtDurInput((settings.startPlus||0)*60);
+  document.getElementById('setStartNad').value = fmtDurInput((settings.startNadure||0)*60);
+}
+
+/* ================= TEME ================= */
+const THEMES = {
+  jeklo:    {bg:'#14181d',panel:'#1c2229',panel2:'#222a33',line:'#2b343f',text:'#e9edf1',muted:'#8b98a5',steel:'#9fb2c1',acc:'#f5a63b'},
+  crna:     {bg:'#000000',panel:'#101010',panel2:'#1b1b1b',line:'#282828',text:'#f2f2f2',muted:'#9a9a9a',steel:'#c4c4c4',acc:'#f5a63b'},
+  roza:     {bg:'#fdf0f6',panel:'#ffffff',panel2:'#fbe3ef',line:'#f0c4da',text:'#43213a',muted:'#a4718f',steel:'#8f5c7c',acc:'#e0559a'},
+  svetla:   {bg:'#f3f5f8',panel:'#ffffff',panel2:'#e9edf2',line:'#d8dfe7',text:'#1c2430',muted:'#68737f',steel:'#4d5a68',acc:'#e8920f'},
+  vijolicna:{bg:'#161221',panel:'#1f1930',panel2:'#282040',line:'#382d55',text:'#ece7f8',muted:'#9d92b8',steel:'#b9aede',acc:'#a678f2'}
+};
+function hexRgb(h){ h=h.replace('#',''); if(h.length===3) h=h.split('').map(c=>c+c).join(''); return [parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)]; }
+function rgbHex(r){ return '#'+r.map(x=>Math.max(0,Math.min(255,Math.round(x))).toString(16).padStart(2,'0')).join(''); }
+function mixc(a,b,t){ const A=hexRgb(a),B=hexRgb(b); return rgbHex([0,1,2].map(i=>A[i]*(1-t)+B[i]*t)); }
+function themeVals(){
+  if(settings.theme==='custom' && settings.customColors){
+    const c = settings.customColors;
+    return { bg:c.bg, panel:c.panel, panel2:mixc(c.panel,c.text,0.07), line:c.line, text:c.text,
+             muted:mixc(c.text,c.bg,0.42), steel:mixc(c.text,c.bg,0.25), acc:c.acc };
+  }
+  return THEMES[settings.theme] || THEMES.jeklo;
+}
+function applyTheme(){
+  const t = themeVals(), r = document.documentElement.style;
+  r.setProperty('--bg',t.bg); r.setProperty('--panel',t.panel); r.setProperty('--panel2',t.panel2);
+  r.setProperty('--line',t.line); r.setProperty('--text',t.text); r.setProperty('--muted',t.muted);
+  r.setProperty('--steel',t.steel); r.setProperty('--amber',t.acc); r.setProperty('--amber-d',mixc(t.acc,'#000000',0.3));
+  const meta = document.querySelector('meta[name=theme-color]');
+  if(meta) meta.setAttribute('content', t.bg);
+  document.querySelectorAll('.tchip').forEach(x=>x.classList.toggle('active', x.dataset.t===(settings.theme||'jeklo')));
+}
+function fillThemePickers(){
+  const t = themeVals();
+  const c = (settings.theme==='custom' && settings.customColors) ? settings.customColors
+          : { bg:t.bg, panel:t.panel, line:t.line, text:t.text, acc:t.acc };
+  document.getElementById('cBg').value = c.bg;
+  document.getElementById('cPanel').value = c.panel;
+  document.getElementById('cLine').value = c.line;
+  document.getElementById('cText').value = c.text;
+  document.getElementById('cAcc').value = c.acc;
+}
+async function setTheme(name){
+  settings.theme = name;
+  await sSet('settings', settings);
+  applyTheme(); fillThemePickers();
+  toast('Tema: '+({jeklo:'Jeklo',crna:'Črna',roza:'Roza',svetla:'Svetla',vijolicna:'Vijolična'}[name]||name));
+}
+async function customChanged(){
+  settings.theme = 'custom';
+  settings.customColors = {
+    bg: document.getElementById('cBg').value,
+    panel: document.getElementById('cPanel').value,
+    line: document.getElementById('cLine').value,
+    text: document.getElementById('cText').value,
+    acc: document.getElementById('cAcc').value
+  };
+  await sSet('settings', settings);
+  applyTheme();
+  toast('Barve po meri shranjene');
+}
+
+/* ================= IZVOZ / UVOZ ================= */
+function dl(name, content, type){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], {type}));
+  a.download = name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
+}
+function csvNum(min){
+  if(min===null||min===undefined) return '';
+  min = Math.round(min);
+  const sign = min<0 ? '-' : '';
+  const a = Math.abs(min);
+  return sign + Math.floor(a/60) + ':' + pad(a%60);   // ure:minute, kot Špica
+}
+function exportCSV(){
+  const y = viewMonth.getFullYear(), m = viewMonth.getMonth();
+  const ym = y+'-'+pad(m+1);
+  const mm = store['m:'+ym] || {};
+  const ndays = new Date(y, m+1, 0).getDate();
+  const all = computeAll();
+  let run = all.months[ym] ? all.months[ym].startSaldo : all.carryBefore(ym);
+  const startSaldo = run;
+  let out = 'Datum;Dan;Tip;Prihod;Odhod;Oddelano;Plus;Saldo;Nadure;Opomba\n';
+  let sw=0, sp=0, sn=0;
+  for(let d=1; d<=ndays; d++){
+    const ds = ym+'-'+pad(d);
+    const rec = mm[String(d)];
+    const c = dayCalc(ds, rec);
+    if(c.worked!==null) sw += c.worked;
+    if(c.plus!==null){ sp += c.plus; run += c.plus; }
+    sn += c.nad;
+    out += [pad(d)+'.'+pad(m+1)+'.'+y, DOW[new Date(ds+'T12:00:00').getDay()], c.type,
+      rec&&rec.i?rec.i:'', rec&&rec.o?rec.o:'',
+      csvNum(c.worked), c.plus!==null?csvNum(c.plus):'', c.plus!==null?csvNum(run):'', c.nad?csvNum(c.nad):'',
+      rec&&rec.note?('"'+rec.note.replace(/"/g,'""')+'"'):''].join(';')+'\n';
+  }
+  const endSaldo = startSaldo + sp;
+  const payout = endSaldo > all.cap ? endSaldo - all.cap : 0;
+  out += ';;;;SKUPAJ;'+csvNum(sw)+';'+csvNum(sp)+';;'+csvNum(sn)+';\n';
+  out += ';;;;Prenos iz prej;'+csvNum(startSaldo)+';;;;\n';
+  out += ';;;;Saldo konec meseca;'+csvNum(endSaldo)+';;;;\n';
+  out += ';;;;Izplacljive ure;'+csvNum(payout)+';;;;\n';
+  out += ';;;;Prenos naprej;'+csvNum(Math.min(endSaldo, all.cap))+';;;;\n';
+  dl('britime-'+ym+'.csv', '\ufeff'+out, 'text/csv;charset=utf-8');
+  toast('CSV izvožen');
+}
+function exportJSON(){
+  dl('britime-backup-'+dKey(new Date())+'.json', JSON.stringify({settings, store}, null, 1), 'application/json');
+  toast('Kopija izvožena');
+}
+function importJSON(inp){
+  const f = inp.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = async () => {
+    try{
+      const data = JSON.parse(r.result);
+      if(data.settings){ settings = Object.assign(settings, data.settings); await sSet('settings', settings); }
+      if(data.store){ for(const k in data.store){ store[k] = data.store[k]; await sSet(k, store[k]); } }
+      fillSettings(); applyTheme(); fillThemePickers(); rerenderAll(); renderMonth();
+      toast('Podatki uvoženi');
+    }catch(e){ toast('Neveljavna datoteka'); }
+  };
+  r.readAsText(f); inp.value = '';
+}
+
+/* ================= UVOZ IZ EXCELA (Špica) ================= */
+function xDate(v){
+  if(v instanceof Date && !isNaN(v)){
+    const d = new Date(v.getTime() + 120000);
+    const y = d.getFullYear();
+    if(y < 2000 || y > 2100) return null;
+    return new Date(y, d.getMonth(), d.getDate());
+  }
+  if(typeof v === 'number' && v > 20000 && v < 80000){
+    const t = new Date(Date.UTC(1899,11,30) + Math.round(v)*86400000);
+    return new Date(t.getUTCFullYear(), t.getUTCMonth(), t.getUTCDate());
+  }
+  if(typeof v === 'string'){
+    let m = v.match(/(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if(m) return new Date(+m[1], +m[2]-1, +m[3]);
+    m = v.match(/(\d{1,2})\.\s?(\d{1,2})\.\s?(\d{4})/);
+    if(m) return new Date(+m[3], +m[2]-1, +m[1]);
+  }
+  return null;
+}
+function xTime(v){
+  let mins = null;
+  if(v instanceof Date && !isNaN(v)){
+    mins = v.getHours()*60 + v.getMinutes() + (v.getSeconds()>=30?1:0);
+  } else if(typeof v === 'number' && v > 0 && v < 1){
+    mins = Math.round(v*1440);
+  } else if(typeof v === 'string' && v.includes(':')){
+    const p = v.trim().split(':');
+    if(!isNaN(+p[0]) && !isNaN(+p[1])) mins = (+p[0])*60 + (+p[1]);
+  }
+  if(mins===null || mins<=0 || mins>=1440) return null;
+  return pad(Math.floor(mins/60))+':'+pad(mins%60);
+}
+function xNadMin(v){
+  if(v instanceof Date && !isNaN(v)) return v.getHours()*60 + v.getMinutes();
+  if(typeof v === 'string' && v.includes(':')){
+    const p = v.trim().split(':');
+    if(!isNaN(+p[0]) && !isNaN(+p[1])) return (+p[0])*60 + (+p[1]);
+  }
+  if(typeof v === 'number' && v > 0){
+    if(v < 1) return Math.round(v*1440);
+    if(v <= 24) return Math.round(v*60);
+  }
+  return 0;
+}
+async function importExcel(inp){
+  const f = inp.files[0]; if(!f) return;
+  const res = document.getElementById('impResult');
+  if(typeof XLSX === 'undefined'){
+    res.textContent = 'Za uvoz Excela potrebuješ internetno povezavo (naloži se knjižnica za branje). Poveži se in poskusi znova.';
+    inp.value=''; return;
+  }
+  res.textContent = 'Berem datoteko…';
+  try{
+    const buf = await f.arrayBuffer();
+    const wb = XLSX.read(buf, {cellDates:true});
+    let days = 0;
+    const touched = {}, monthsSet = new Set();
+    for(const name of wb.SheetNames){
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, defval:null});
+      for(const r of rows){
+        if(!r || !r.length) continue;
+        const d = xDate(r[0]); if(!d) continue;
+        const i = xTime(r[1]);
+        const o = xTime(r[2]);
+        const n = xNadMin(r[6]);
+        if(!i && !o && !n) continue;
+        const ds = dKey(d);
+        const mk = 'm:'+ds.slice(0,7);
+        if(!store[mk]) store[mk] = {};
+        const dd = String(d.getDate());
+        const rec = store[mk][dd] || {};
+        if(i) rec.i = i;
+        if(o) rec.o = o;
+        if(n) rec.n = n;
+        store[mk][dd] = rec;
+        touched[mk] = 1; monthsSet.add(ds.slice(0,7)); days++;
+      }
+    }
+    for(const mk in touched) await sSet(mk, store[mk]);
+    rerenderAll();
+    if(days){
+      const ml = [...monthsSet].sort();
+      res.textContent = 'Uvoženih '+days+' dni ('+ml.length+' mesecev: '+ml.map(x=>{const p=x.split('-');return MONTHS[+p[1]-1]+' '+p[0];}).join(', ')+'). Preveri še "Začetni saldo" v nastavitvah, če si imel prenos ur izpred obdobja v datoteki.';
+      toast('Uvoženih '+days+' dni');
+    } else {
+      res.textContent = 'V datoteki nisem našel izpolnjenih dni. Preveri, da uvažaš izpolnjeno evidenco s stolpci Datum, Stanje Začetek, Stanje Konec.';
+      toast('Ni podatkov za uvoz');
+    }
+  }catch(e){
+    console.error(e);
+    res.textContent = 'Napaka pri branju datoteke. Poskusi datoteko v Excelu shraniti kot .xlsx in ponovi uvoz.';
+    toast('Napaka pri branju Excela');
+  }
+  inp.value = '';
+}
+
+/* ================= OBLAK (Firebase) =================
+   Prijava z e-pošto in geslom (brez potrditvenih mailov), podatki v Firestore.
+   Vsak uporabnik vidi SAMO svoje podatke (pravila na strežniku). */
+let fbAuth = null, fbDb = null, fbUser = null;
+let unsubMonths = null, unsubUser = null;
+let firstMonthsSnap = true, firstUserSnap = true;
+let suppressCloud = false; // med prvim nalaganjem iz oblaka ne pišemo nazaj
+
+function cloudConfigured(){
+  return typeof firebase !== 'undefined'
+      && typeof window.FIREBASE_CONFIG === 'object'
+      && window.FIREBASE_CONFIG
+      && window.FIREBASE_CONFIG.apiKey
+      && !/PRILEPI/i.test(window.FIREBASE_CONFIG.apiKey);
+}
+function userDoc(){ return fbDb.collection('users').doc(fbUser.uid); }
+function monthsCol(){ return userDoc().collection('months'); }
+
+function cloudWrite(k, v){
+  if(!fbUser || !fbDb || suppressCloud) return;
+  try{
+    if(k.startsWith('m:')) monthsCol().doc(k.slice(2)).set({days:v}).catch(e=>console.error(e));
+    else if(k==='settings') userDoc().set({settings:v}, {merge:true}).catch(e=>console.error(e));
+  }catch(e){ console.error(e); }
+}
+function cloudDelete(k){
+  if(!fbUser || !fbDb) return;
+  try{ if(k.startsWith('m:')) monthsCol().doc(k.slice(2)).delete().catch(()=>{}); }catch(e){}
+}
+function setSync(txt, ok){
+  const el = document.getElementById('syncState');
+  if(el){ el.textContent = txt; el.className = 'v '+(ok?'pos':'zero'); }
+}
+function startSync(){
+  document.getElementById('accountCard').style.display = 'block';
+  document.getElementById('accEmail').textContent = fbUser.email || '';
+  setSync('povezujem…', false);
+  firstMonthsSnap = true; firstUserSnap = true;
+
+  unsubUser = userDoc().onSnapshot(d => {
+    const data = d.exists ? d.data() : null;
+    if(data && data.settings){
+      suppressCloud = true;
+      settings = Object.assign(settings, data.settings);
+      lsSet('settings', settings);
+      fillSettings(); applyTheme(); fillThemePickers(); rerenderAll();
+      suppressCloud = false;
+    } else if(firstUserSnap){
+      // prvi vpis: naloži lokalne nastavitve v oblak
+      userDoc().set({settings}, {merge:true}).catch(e=>console.error(e));
+    }
+    firstUserSnap = false;
+  }, e => { console.error(e); setSync('napaka', false); });
+
+  unsubMonths = monthsCol().onSnapshot(snap => {
+    suppressCloud = true;
+    snap.docChanges().forEach(ch => {
+      const key = 'm:'+ch.doc.id;
+      if(ch.type === 'removed'){
+        delete store[key]; lsDel(key);
+      } else {
+        store[key] = (ch.doc.data() && ch.doc.data().days) || {};
+        lsSet(key, store[key]);
+      }
+    });
+    suppressCloud = false;
+    if(firstMonthsSnap){
+      firstMonthsSnap = false;
+      // prvi vpis na tej napravi: mesece, ki jih oblak še nima, naloži gor
+      const cloudIds = new Set(snap.docs.map(x=>x.id));
+      for(const k in store){
+        if(k.startsWith('m:') && !cloudIds.has(k.slice(2)) && Object.keys(store[k]||{}).length){
+          monthsCol().doc(k.slice(2)).set({days:store[k]}).catch(e=>console.error(e));
+        }
+      }
+    }
+    setSync('vklopljena ✓', true);
+    rerenderAll();
+  }, e => { console.error(e); setSync('napaka', false); });
+}
+function stopSync(){
+  if(unsubMonths){ unsubMonths(); unsubMonths=null; }
+  if(unsubUser){ unsubUser(); unsubUser=null; }
+  document.getElementById('accountCard').style.display = 'none';
+}
+function authErrSl(e){
+  const c = (e && e.code) || '';
+  if(c.includes('invalid-credential') || c.includes('wrong-password') || c.includes('user-not-found')) return 'Napačna e-pošta ali geslo.';
+  if(c.includes('email-already-in-use')) return 'Ta e-pošta je že registrirana — klikni Prijava.';
+  if(c.includes('weak-password')) return 'Geslo mora imeti vsaj 6 znakov.';
+  if(c.includes('invalid-email')) return 'Neveljavna e-pošta.';
+  if(c.includes('too-many-requests')) return 'Preveč poskusov — počakaj minuto.';
+  if(c.includes('network')) return 'Ni internetne povezave.';
+  return 'Napaka: '+c;
+}
+async function loginUser(){
+  const em = document.getElementById('lEmail').value.trim();
+  const pw = document.getElementById('lPass').value;
+  const err = document.getElementById('lErr');
+  err.textContent = '';
+  try{ await fbAuth.signInWithEmailAndPassword(em, pw); }
+  catch(e){ err.textContent = authErrSl(e); }
+}
+async function registerUser(){
+  const em = document.getElementById('lEmail').value.trim();
+  const pw = document.getElementById('lPass').value;
+  const err = document.getElementById('lErr');
+  err.textContent = '';
+  if(pw.length < 6){ err.textContent = 'Geslo mora imeti vsaj 6 znakov.'; return; }
+  try{ await fbAuth.createUserWithEmailAndPassword(em, pw); toast('Račun ustvarjen 🎉'); }
+  catch(e){ err.textContent = authErrSl(e); }
+}
+async function logoutUser(){
+  if(!confirm('Se odjavim? Podatki ostanejo varno v oblaku.')) return;
+  await fbAuth.signOut();
+}
+function wipeLocalData(){
+  const del = [];
+  for(let i=0; i<localStorage.length; i++){
+    const k = localStorage.key(i);
+    if(k && k.startsWith(SKEY) && k!==SKEY+'uid') del.push(k);
+  }
+  del.forEach(k=>localStorage.removeItem(k));
+  store = {};
+  settings = { norm:8, izplPrag:20, startPlus:0, startNadure:0 };
+}
+function initCloud(){
+  if(!cloudConfigured()){
+    // lokalni način: brez prijave, vse deluje na tej napravi — a to pokažemo!
+    const w = document.getElementById('cloudWarn');
+    if(w) w.style.display = 'block';
+    return;
+  }
+  try{
+    firebase.initializeApp(window.FIREBASE_CONFIG);
+    fbAuth = firebase.auth();
+    fbDb = firebase.firestore();
+    try{ fbDb.enablePersistence({synchronizeTabs:true}).catch(()=>{}); }catch(e){}
+    document.getElementById('loginScreen').classList.add('open');
+    fbAuth.onAuthStateChanged(user => {
+      if(user){
+        // če se je na tej napravi prej uporabljal drug račun, počisti lokalne podatke
+        const prevUid = localStorage.getItem(SKEY+'uid');
+        if(prevUid && prevUid !== user.uid){ wipeLocalData(); fillSettings(); applyTheme(); fillThemePickers(); rerenderAll(); }
+        localStorage.setItem(SKEY+'uid', user.uid);
+        fbUser = user;
+        document.getElementById('loginScreen').classList.remove('open');
+        startSync();
+      } else {
+        fbUser = null;
+        stopSync();
+        document.getElementById('loginScreen').classList.add('open');
+      }
+    });
+  }catch(e){ console.error('Firebase init:', e); }
+}
+
+/* ================= NAMESTITEV (Android) ================= */
+let deferredPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const c = document.getElementById('installCard');
+  if(c) c.style.display = 'block';
+});
+async function installApp(){
+  if(!deferredPrompt){ toast('Uporabi meni brskalnika ⋮ → Namesti aplikacijo'); return; }
+  deferredPrompt.prompt();
+  await deferredPrompt.userChoice;
+  deferredPrompt = null;
+  document.getElementById('installCard').style.display = 'none';
+}
+window.addEventListener('appinstalled', () => {
+  const c = document.getElementById('installCard');
+  if(c) c.style.display = 'none';
+  toast('BRITIME nameščen 🎉');
+});
+
+/* ================= RAZNO ================= */
+let toastT;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+function tick(){
+  const d = new Date();
+  document.getElementById('clock').textContent = pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  if(!tick.c) tick.c = 0;
+  if(++tick.c % 30 === 0) renderToday();
+}
+
+/* ================= ZAGON ================= */
+(function init(){
+  settings = Object.assign(settings, lsGet('settings', {}));
+  nsess = lsGet('nsess', null);
+  if(nsess && nsess.date !== dKey(new Date())){ nsess = null; lsDel('nsess'); }
+  try{
+    for(let i=0; i<localStorage.length; i++){
+      const full = localStorage.key(i);
+      if(full && full.startsWith(SKEY+'m:')){
+        const key = full.slice(SKEY.length);
+        store[key] = lsGet(key, {});
+      }
+    }
+  }catch(e){}
+  fillSettings();
+  applyTheme(); fillThemePickers();
+  rerenderAll();
+  tick(); setInterval(tick, 1000);
+  initCloud();
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
+})();
+</script>
+</body>
+</html>
