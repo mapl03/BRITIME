@@ -183,6 +183,8 @@
   <div class="saldo"><div class="lbl">Saldo nadur</div><div class="val nad" id="saldoNad">0:00</div></div>
 </div>
 
+<div id="cloudWarn" style="display:none; background:rgba(228,87,79,.12); border-bottom:1px solid var(--red); color:var(--red); font-size:12px; padding:8px 16px; font-weight:600">⚠ Oblak ni povezan — sinhronizacija NE deluje. Preveri datoteko firebase-config.js na GitHubu.</div>
+
 <main>
 
   <!-- DANES -->
@@ -273,11 +275,11 @@
         <div class="field"><label>Meja za izplačilo (h)</label><input type="number" id="setPrag" step="1" min="0"></div>
       </div>
       <div class="grid2">
-        <div class="field"><label>Začetni saldo plus (h)</label><input type="number" id="setStartPlus" step="0.25"></div>
-        <div class="field"><label>Začetne nadure (h)</label><input type="number" id="setStartNad" step="0.25"></div>
+        <div class="field"><label>Začetni saldo plus (u:min)</label><input type="text" id="setStartPlus" inputmode="numeric" placeholder="npr. 14:18"></div>
+        <div class="field"><label>Začetne nadure (u:min)</label><input type="text" id="setStartNad" inputmode="numeric" placeholder="npr. 2:30"></div>
       </div>
       <button class="btn amber" onclick="saveSettings()">Shrani nastavitve</button>
-      <div class="note">Če Excela nisi vodil, vpiši trenutno stanje pod "Začetni saldo plus" (npr. 22) — aplikacija nadaljuje od tam. Plus ure in nadure se vedno štejejo ločeno.</div>
+      <div class="note">Začetni saldo vpiši v obliki ure:minute, npr. 14:18 (lahko tudi -3:30, če si v minusu). Plus ure in nadure se vedno štejejo ločeno.</div>
     </div>
     <div class="card">
       <h3>Videz</h3>
@@ -682,19 +684,35 @@ async function clearEdit(){
 }
 
 /* ================= NASTAVITVE ================= */
+/* vnos s predznakom (začetni saldo je lahko tudi minus) */
+function parseDurSigned(s){
+  s = (s||'').trim();
+  const neg = s.startsWith('-') || s.startsWith('−');
+  if(neg) s = s.slice(1);
+  const m = parseDur(s);
+  return neg ? -m : m;
+}
+function fmtDurInput(min){
+  min = Math.round(min);
+  const sign = min<0 ? '-' : '';
+  const a = Math.abs(min);
+  return sign + Math.floor(a/60) + ':' + pad(a%60);
+}
 async function saveSettings(){
   settings.norm = parseFloat(document.getElementById('setNorm').value)||8;
   settings.izplPrag = parseFloat(document.getElementById('setPrag').value)||20;
-  settings.startPlus = parseFloat(document.getElementById('setStartPlus').value)||0;
-  settings.startNadure = parseFloat(document.getElementById('setStartNad').value)||0;
+  settings.startPlus = parseDurSigned(document.getElementById('setStartPlus').value)/60;
+  settings.startNadure = parseDur(document.getElementById('setStartNad').value)/60;
   await sSet('settings', settings);
-  rerenderAll(); toast('Nastavitve shranjene');
+  fillSettings();
+  rerenderAll();
+  toast('Shranjeno · začetni saldo '+fmtDurInput(settings.startPlus*60));
 }
 function fillSettings(){
   document.getElementById('setNorm').value = settings.norm;
   document.getElementById('setPrag').value = settings.izplPrag||20;
-  document.getElementById('setStartPlus').value = settings.startPlus;
-  document.getElementById('setStartNad').value = settings.startNadure;
+  document.getElementById('setStartPlus').value = fmtDurInput((settings.startPlus||0)*60);
+  document.getElementById('setStartNad').value = fmtDurInput((settings.startNadure||0)*60);
 }
 
 /* ================= TEME ================= */
@@ -762,7 +780,13 @@ function dl(name, content, type){
   a.download = name; a.click();
   setTimeout(()=>URL.revokeObjectURL(a.href), 2000);
 }
-function csvNum(min){ return (min===null||min===undefined) ? '' : (min/60).toFixed(2).replace('.',','); }
+function csvNum(min){
+  if(min===null||min===undefined) return '';
+  min = Math.round(min);
+  const sign = min<0 ? '-' : '';
+  const a = Math.abs(min);
+  return sign + Math.floor(a/60) + ':' + pad(a%60);   // ure:minute, kot Špica
+}
 function exportCSV(){
   const y = viewMonth.getFullYear(), m = viewMonth.getMonth();
   const ym = y+'-'+pad(m+1);
@@ -771,7 +795,7 @@ function exportCSV(){
   const all = computeAll();
   let run = all.months[ym] ? all.months[ym].startSaldo : all.carryBefore(ym);
   const startSaldo = run;
-  let out = 'Datum;Dan;Tip;Prihod;Odhod;Oddelano (h);Plus (h);Saldo (h);Nadure (h);Opomba\n';
+  let out = 'Datum;Dan;Tip;Prihod;Odhod;Oddelano;Plus;Saldo;Nadure;Opomba\n';
   let sw=0, sp=0, sn=0;
   for(let d=1; d<=ndays; d++){
     const ds = ym+'-'+pad(d);
@@ -1039,7 +1063,9 @@ function wipeLocalData(){
 }
 function initCloud(){
   if(!cloudConfigured()){
-    // lokalni način: brez prijave, vse deluje na tej napravi
+    // lokalni način: brez prijave, vse deluje na tej napravi — a to pokažemo!
+    const w = document.getElementById('cloudWarn');
+    if(w) w.style.display = 'block';
     return;
   }
   try{
