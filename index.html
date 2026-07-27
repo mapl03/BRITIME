@@ -199,6 +199,7 @@
       <div class="rowline"><span class="k">Prihod</span><span class="v" id="tIn">—</span></div>
       <div class="rowline"><span class="k">Odhod</span><span class="v" id="tOut">—</span></div>
       <div class="rowline"><span class="k">Oddelano</span><span class="v" id="tWorked">—</span></div>
+      <div class="rowline" id="tCutRow" style="display:none"><span class="k">Odtrgano (malica/pavza)</span><span class="v neg" id="tCut">0 min</span></div>
       <div class="rowline"><span class="k">Plus / minus</span><span class="v" id="tPlus">—</span></div>
       <div class="rowline"><span class="k">Nadure</span><span class="v nad" id="tNad">0:00</span></div>
     </div>
@@ -325,8 +326,12 @@
       <div class="field"><label>Prihod</label><input type="time" id="eIn"></div>
       <div class="field"><label>Odhod</label><input type="time" id="eOut"></div>
     </div>
-    <div class="field"><label>Nadure (ure:minute) — samo ročno odrejene</label><input type="text" id="eNad" inputmode="numeric" placeholder="npr. 2:15"></div>
+    <div class="grid2">
+      <div class="field"><label>Nadure (u:min) — ročno</label><input type="text" id="eNad" inputmode="numeric" placeholder="npr. 2:15"></div>
+      <div class="field"><label>Odtrgane min. (malica/pavza)</label><input type="number" id="eCut" inputmode="numeric" min="0" placeholder="npr. 15"></div>
+    </div>
     <div class="field"><label>Opomba</label><textarea id="eNote" placeholder="npr. dopust, teren, zdravnik…"></textarea></div>
+    <div class="note" style="margin:0 0 12px">Odtrgane minute (predolga malica/pavza) se odštejejo od oddelanega časa in znižajo plus. Nadure ostanejo ločene.</div>
     <button class="btn amber" onclick="saveEdit()">Shrani</button>
     <button class="btn danger" onclick="clearEdit()">Počisti dan</button>
   </div>
@@ -412,16 +417,19 @@ function dayCalc(dateStr, rec){
   const type = dayType(dateStr);
   let worked = null, plus = null;
   let nad = rec ? (rec.n||0) : 0;                 // ročno odrejene nadure
+  const cut = rec ? (rec.d||0) : 0;               // odtrgane minute (malica/pavza)
   if(rec && rec.i && rec.o){
     worked = hmToMin(rec.o) - hmToMin(rec.i);
     if(worked < 0) worked += 1440;                // čez polnoč
+    worked -= cut;                                // odtrgane minute znižajo oddelani čas
+    if(worked < 0) worked = 0;
     if(type === 'delovni'){
       plus = worked - settings.norm*60;           // nadure se NE odštevajo!
     } else {
       nad += worked;                              // vikend/praznik: vse ure → nadure
     }
   }
-  return { type, worked, plus, nad };
+  return { type, worked, plus, nad, cut };
 }
 function computeAll(){
   const cap = Math.round((settings.izplPrag||20)*60);
@@ -496,6 +504,9 @@ function renderToday(){
   document.getElementById('tIn').textContent = rec && rec.i ? rec.i : '—';
   document.getElementById('tOut').textContent = rec && rec.o ? rec.o : '—';
   document.getElementById('tWorked').textContent = fmtMin(c.worked);
+  const cutRow = document.getElementById('tCutRow');
+  if(c.cut > 0){ cutRow.style.display = 'flex'; document.getElementById('tCut').textContent = '−'+c.cut+' min'; }
+  else { cutRow.style.display = 'none'; }
   const tp = document.getElementById('tPlus');
   if(isWknd){
     tp.textContent = c.worked!==null ? '→ nadure' : '—';
@@ -660,6 +671,7 @@ function openEdit(ds){
   document.getElementById('eIn').value = rec.i||'';
   document.getElementById('eOut').value = rec.o||'';
   document.getElementById('eNad').value = rec.n ? fmtMin(rec.n) : '';
+  document.getElementById('eCut').value = rec.d ? rec.d : '';
   document.getElementById('eNote').value = rec.note||'';
   document.getElementById('editOverlay').classList.add('open');
 }
@@ -668,14 +680,16 @@ async function saveEdit(){
   const i = document.getElementById('eIn').value;
   const o = document.getElementById('eOut').value;
   const nmin = parseDur(document.getElementById('eNad').value);
+  const cut = Math.max(0, Math.round(parseFloat(document.getElementById('eCut').value)||0));
   const note = document.getElementById('eNote').value.trim();
   const rec = {};
   if(i) rec.i = i;
   if(o) rec.o = o;
   if(nmin > 0) rec.n = nmin;
+  if(cut > 0) rec.d = cut;
   if(note) rec.note = note;
   await saveDay(editDate, Object.keys(rec).length ? rec : null);
-  closeEdit(); toast(nmin>0 ? 'Shranjeno · nadure '+fmtMin(nmin) : 'Shranjeno');
+  closeEdit(); toast(cut>0 ? 'Shranjeno · odtrgano '+cut+' min' : (nmin>0 ? 'Shranjeno · nadure '+fmtMin(nmin) : 'Shranjeno'));
 }
 async function clearEdit(){
   if(!confirm('Počistim vse vnose za ta dan?')) return;
@@ -795,7 +809,7 @@ function exportCSV(){
   const all = computeAll();
   let run = all.months[ym] ? all.months[ym].startSaldo : all.carryBefore(ym);
   const startSaldo = run;
-  let out = 'Datum;Dan;Tip;Prihod;Odhod;Oddelano;Plus;Saldo;Nadure;Opomba\n';
+  let out = 'Datum;Dan;Tip;Prihod;Odhod;Oddelano;Odtrgano (min);Plus;Saldo;Nadure;Opomba\n';
   let sw=0, sp=0, sn=0;
   for(let d=1; d<=ndays; d++){
     const ds = ym+'-'+pad(d);
@@ -806,12 +820,12 @@ function exportCSV(){
     sn += c.nad;
     out += [pad(d)+'.'+pad(m+1)+'.'+y, DOW[new Date(ds+'T12:00:00').getDay()], c.type,
       rec&&rec.i?rec.i:'', rec&&rec.o?rec.o:'',
-      csvNum(c.worked), c.plus!==null?csvNum(c.plus):'', c.plus!==null?csvNum(run):'', c.nad?csvNum(c.nad):'',
+      csvNum(c.worked), c.cut?c.cut:'', c.plus!==null?csvNum(c.plus):'', c.plus!==null?csvNum(run):'', c.nad?csvNum(c.nad):'',
       rec&&rec.note?('"'+rec.note.replace(/"/g,'""')+'"'):''].join(';')+'\n';
   }
   const endSaldo = startSaldo + sp;
   const payout = endSaldo > all.cap ? endSaldo - all.cap : 0;
-  out += ';;;;SKUPAJ;'+csvNum(sw)+';'+csvNum(sp)+';;'+csvNum(sn)+';\n';
+  out += ';;;;SKUPAJ;'+csvNum(sw)+';;'+csvNum(sp)+';;'+csvNum(sn)+';\n';
   out += ';;;;Prenos iz prej;'+csvNum(startSaldo)+';;;;\n';
   out += ';;;;Saldo konec meseca;'+csvNum(endSaldo)+';;;;\n';
   out += ';;;;Izplacljive ure;'+csvNum(payout)+';;;;\n';
