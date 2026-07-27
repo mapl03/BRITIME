@@ -132,6 +132,10 @@
   }
   .toast.show{opacity:1}
   .note{font-size:12px; color:var(--muted); line-height:1.5; margin-top:10px}
+  #whatsnewList li{display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-top:1px solid var(--line); font-size:14px; line-height:1.45}
+  #whatsnewList li:first-child{border-top:none}
+  #whatsnewList li .wn-ic{flex:0 0 auto; font-size:16px; margin-top:1px}
+  #whatsnewList li b{color:var(--amber)}
   .totals .v{font-size:15px}
 
   .tchips{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px}
@@ -334,6 +338,19 @@
     <div class="note" style="margin:0 0 12px">Odtrgane minute (predolga malica/pavza) se odštejejo od oddelanega časa in znižajo plus. Nadure ostanejo ločene.</div>
     <button class="btn amber" onclick="saveEdit()">Shrani</button>
     <button class="btn danger" onclick="clearEdit()">Počisti dan</button>
+  </div>
+</div>
+
+<!-- Kaj je novega -->
+<div class="overlay" id="whatsnewOverlay">
+  <div class="sheet">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px">
+      <h2 style="margin:0">✨ Kaj je novega</h2>
+      <button onclick="closeWhatsNew()" style="background:var(--panel2); border:1px solid var(--line); color:var(--text); width:38px; height:38px; border-radius:10px; font-size:20px; cursor:pointer; line-height:1">×</button>
+    </div>
+    <div id="whatsnewVer" style="font-size:12px; color:var(--muted); margin-bottom:14px"></div>
+    <ul id="whatsnewList" style="list-style:none; padding:0; margin:0"></ul>
+    <button class="btn amber" onclick="closeWhatsNew()" style="margin-top:16px">Razumem 👍</button>
   </div>
 </div>
 
@@ -1127,6 +1144,37 @@ window.addEventListener('appinstalled', () => {
   toast('BRITIME nameščen 🎉');
 });
 
+/* ================= KAJ JE NOVEGA =================
+   Ob vsaki novi verziji nastavi WHATSNEW.ver na novo oznako in vpiši postavke.
+   Okno se pokaže enkrat po posodobitvi; uporabnik ga zapre z X ali gumbom.
+   "Videno" se hrani lokalno na napravi (ne v oblaku), zato ga vsak vidi svoj prvič. */
+const WHATSNEW = {
+  ver: '2026-07-27',
+  title: 'Posodobitev · julij 2026',
+  items: [
+    { ic:'✂️', html:'<b>Odtrgane minute</b> — pri urejanju dneva lahko vpišeš minute za predolgo malico/pavzo; odštejejo se od oddelanega časa in znižajo plus.' },
+    { ic:'🕐', html:'<b>Ure:minute povsod</b> — vnos nadur in začetnega salda ter CSV izvoz so zdaj v obliki 2:15 (ne več decimalno), enako kot na Špici.' },
+    { ic:'🏖️', html:'<b>Vikendi in prazniki</b> gredo samodejno med nadure — plus ur se ne dotaknejo.' },
+    { ic:'☁️', html:'<b>Sinhronizacija</b> med telefonom in računalnikom teče sproti; ostaneš prijavljen, gesla ni treba vpisovati vsakič.' }
+  ]
+};
+function maybeShowWhatsNew(){
+  try{
+    const seen = localStorage.getItem(SKEY+'whatsnew');
+    if(seen === WHATSNEW.ver) return;           // to verzijo je že videl
+  }catch(e){}
+  const list = document.getElementById('whatsnewList');
+  list.innerHTML = WHATSNEW.items.map(it =>
+    '<li><span class="wn-ic">'+it.ic+'</span><span>'+it.html+'</span></li>'
+  ).join('');
+  document.getElementById('whatsnewVer').textContent = WHATSNEW.title;
+  document.getElementById('whatsnewOverlay').classList.add('open');
+}
+function closeWhatsNew(){
+  document.getElementById('whatsnewOverlay').classList.remove('open');
+  try{ localStorage.setItem(SKEY+'whatsnew', WHATSNEW.ver); }catch(e){}
+}
+
 /* ================= RAZNO ================= */
 let toastT;
 function toast(msg){
@@ -1160,6 +1208,7 @@ function tick(){
   rerenderAll();
   tick(); setInterval(tick, 1000);
   initCloud();
+  maybeShowWhatsNew();
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('./sw.js').catch(()=>{});
   }
